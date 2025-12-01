@@ -41,8 +41,9 @@ logs/
 *.log
 *.log.*
 
-# Model files (too large for git)
+# Model files (too large for git - except deployment artifacts)
 *.cbm
+!artifacts/*.cbm
 *.pkl
 *.pickle
 

@@ -1,6 +1,5 @@
 # Git LFS Configuration for ML Models
 # This file tells Git LFS which files to track
-
 # Track all CatBoost model files
 *.cbm filter=lfs diff=lfs merge=lfs -text
 **/*.cbm filter=lfs diff=lfs merge=lfs -text
