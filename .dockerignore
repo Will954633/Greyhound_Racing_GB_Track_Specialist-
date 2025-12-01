@@ -1,0 +1,13 @@
+.env
+.git
+.gitignore
+logs/
+*.log
+__pycache__/
+*.pyc
+.DS_Store
+README.md
+RAILWAY_DEPLOYMENT_GUIDE.md
+DEPLOY_NOW.md
+.railway/
+models/.gitkeep
