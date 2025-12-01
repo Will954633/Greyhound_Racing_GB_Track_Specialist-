@@ -9,10 +9,10 @@ from pathlib import Path
 import urllib.request
 import hashlib
 
-# TODO: Replace these URLs with your uploaded model URLs
+# Google Drive direct download URLs
 MODEL_URLS = {
-    'base_model.cbm': 'YOUR_BASE_MODEL_URL_HERE',  # Replace with actual URL
-    'calibrator_model.cbm': 'YOUR_CALIBRATOR_URL_HERE'  # Replace with actual URL
+    'base_model.cbm': 'https://drive.google.com/uc?export=download&id=14DW_4eBzEZ-r3ZBOIgA9LYaLs1ocb-ZR',
+    'calibrator_model.cbm': 'https://drive.google.com/uc?export=download&id=1oEGiE95Qry6kmEM-D4N8p67aLkrCTppe'
 }
 
 ARTIFACTS_DIR = Path('artifacts')
