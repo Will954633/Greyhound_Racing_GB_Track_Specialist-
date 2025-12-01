@@ -50,7 +50,7 @@ def download_from_google_drive(file_id, destination):
 
 def main():
     print("=" * 70)
-    print("ML Model Setup")
+    print("ML Model Setup (with public Google Drive access)")
     print("=" * 70)
     
     # Create artifacts directory
