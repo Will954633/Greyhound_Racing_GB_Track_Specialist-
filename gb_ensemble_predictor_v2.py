@@ -39,14 +39,13 @@ class GBEnsemblePredictor:
         """Initialize GB Ensemble predictor with both models."""
         logger.info("Initializing GB Ensemble Predictor V2...")
         
-        # Paths
-        self.base_dir = Path(__file__).parent.parent
-        self.track_model_dir = self.base_dir / 'Models' / 'Track_Specialist_Model'
-        self.optimizer_dir = self.base_dir / 'Models' / 'Betting_Strategy_Optimizer'
-        
+        # Paths - models are in local artifacts/ directory for deployment
+        self.base_dir = Path(__file__).parent
+        self.artifacts_dir = self.base_dir / 'artifacts'
+
         # Load Track Specialist Model
         logger.info("Loading Track Specialist Model...")
-        track_model_path = self.track_model_dir / '01_Track_Specialist_Model_Global_Training' / 'artifacts_global' / 'base_model.cbm'
+        track_model_path = self.artifacts_dir / 'base_model.cbm'
         
         if not track_model_path.exists():
             raise FileNotFoundError(f"Track Specialist model not found: {track_model_path}")
@@ -56,16 +55,16 @@ class GBEnsemblePredictor:
         logger.info(f"✓ Loaded Track Specialist Model")
         logger.info(f"  Expected features: {len(self.track_model.feature_names_)}")
         
-        # Load Betting Optimizer Model
-        logger.info("Loading Betting Optimizer Model...")
-        optimizer_model_path = self.optimizer_dir / 'artifacts' / 'bet_scorer_model.cbm'
+        # Load Calibrator Model
+        logger.info("Loading Calibrator Model...")
+        calibrator_model_path = self.artifacts_dir / 'calibrator_model.cbm'
         
-        if not optimizer_model_path.exists():
-            raise FileNotFoundError(f"Betting Optimizer model not found: {optimizer_model_path}")
+        if not calibrator_model_path.exists():
+            raise FileNotFoundError(f"Calibrator model not found: {calibrator_model_path}")
         
-        self.bet_scorer = CatBoostRegressor()
-        self.bet_scorer.load_model(str(optimizer_model_path))
-        logger.info(f"✓ Loaded Betting Optimizer Model")
+        self.calibrator = CatBoostClassifier()
+        self.calibrator.load_model(str(calibrator_model_path))
+        logger.info(f"✓ Loaded Calibrator Model")
         
         # Strategy configuration
         self.strategy_config = {
@@ -226,60 +225,20 @@ class GBEnsemblePredictor:
             logger.error(f"Missing features: {missing_features}")
             return results
         
-        # Make predictions
+        # Make predictions with base model
         base_probs = self.track_model.predict_proba(df_runners[track_model_features])[:, 1]
         df_runners['base_prob'] = base_probs
-        df_runners['calibrated_prob'] = base_probs
         
-        logger.info(f"✓ Predicted probabilities (range: {base_probs.min():.3f} - {base_probs.max():.3f})")
+        logger.info(f"✓ Base probabilities (range: {base_probs.min():.3f} - {base_probs.max():.3f})")
         
-        # Engineer features for Betting Optimizer
-        logger.info("Step 3: Engineering features for Betting Optimizer...")
+        # Calibrate probabilities
+        logger.info("Step 3: Calibrating probabilities...")
+        calibrated_probs = self.calibrator.predict_proba(df_runners[track_model_features])[:, 1]
+        df_runners['calibrated_prob'] = calibrated_probs
         
-        # Add features needed by Betting Optimizer
-        df_runners['prob_spread'] = df_runners['calibrated_prob'].std()
-        df_runners['favorite_prob'] = df_runners['calibrated_prob'].max()
-        df_runners['prob_odds_gap'] = df_runners['calibrated_prob'] - (1.0 / df_runners['bsp'])
-        df_runners['rank_by_prob'] = df_runners['calibrated_prob'].rank(ascending=False, method='first')
-        df_runners['rank_discrepancy'] = df_runners['runner_odds_rank'] - df_runners['rank_by_prob']
-        df_runners['is_favorite'] = (df_runners['runner_odds_rank'] == 1).astype(int)
-        df_runners['is_longshot'] = df_runners['longshot']
-        df_runners['weak_favorite'] = (df_runners['favorite_prob'] < 0.35).astype(int)
-        df_runners['competitive_runners'] = df_runners['num_competitive']
-        df_runners['is_competitive_field'] = df_runners['competitive_field']
-        df_runners['geometry_cluster'] = 0  # Default
-        df_runners['tsi_to_target_gb'] = 1.0  # Default
-        df_runners['venue'] = race_data['venue']
-        df_runners['venue_abbr'] = race_data['venue'][:4].upper()
+        logger.info(f"✓ Calibrated probabilities (range: {calibrated_probs.min():.3f} - {calibrated_probs.max():.3f})")
         
-        # Predict profit using Betting Optimizer
-        logger.info("Step 4: Predicting profit potential...")
-        
-        optimizer_features = [
-            'venue', 'venue_abbr', 'race_category', 'geometry_cluster',
-            'calibrated_prob', 'base_prob', 'distance', 'runner_box', 'tsi_to_target_gb',
-            'bsp', 'runner_odds', 'runner_odds_rank', 'favorite_prob', 'prob_spread',
-            'field_size', 'prob_odds_gap', 'rank_by_prob', 'rank_discrepancy',
-            'is_favorite', 'is_longshot', 'weak_favorite', 'competitive_runners',
-            'is_competitive_field'
-        ]
-        
-        predicted_profits = self.bet_scorer.predict(df_runners[optimizer_features])
-        df_runners['predicted_profit'] = predicted_profits
-        
-        logger.info(f"✓ Predicted profits (range: ${predicted_profits.min():.2f} - ${predicted_profits.max():.2f})")
-        
-        # Select betting opportunities (top 15%)
-        logger.info("Step 5: Identifying betting opportunities...")
-        
-        threshold = df_runners['predicted_profit'].quantile(0.85)
-        df_opportunities = df_runners[df_runners['predicted_profit'] >= threshold].copy()
-        df_opportunities = df_opportunities.sort_values('predicted_profit', ascending=False)
-        
-        logger.info(f"Profit threshold: ${threshold:.2f}")
-        logger.info(f"Opportunities identified: {len(df_opportunities)}")
-        
-        # Package results
+        # Package results - just return probabilities for each runner
         for idx, row in df_runners.iterrows():
             prediction = {
                 'runner_name': row['runner_name'],
@@ -289,29 +248,9 @@ class GBEnsemblePredictor:
                 'win_probability': {
                     'base': float(row['base_prob']),
                     'calibrated': float(row['calibrated_prob'])
-                },
-                'predicted_profit': float(row['predicted_profit']),
-                'rank_by_probability': int(row['rank_by_prob']),
-                'rank_by_profit': int(df_runners['predicted_profit'].rank(ascending=False, method='first').loc[idx]),
-                'is_favorite': bool(row['is_favorite']),
-                'is_longshot': bool(row['is_longshot']),
-                'recommended_bet': row['runner_id'] in df_opportunities['runner_id'].values
+                }
             }
             results['predictions'].append(prediction)
-        
-        # Add betting opportunities
-        for idx, row in df_opportunities.iterrows():
-            opportunity = {
-                'runner_name': row['runner_name'],
-                'selection_id': row['runner_id'],
-                'trap': row['runner_box'],
-                'ltp': row['runner_odds'],
-                'win_probability': float(row['calibrated_prob']),
-                'predicted_profit': float(row['predicted_profit']),
-                'expected_value': float(row['calibrated_prob'] * row['runner_odds'] - 1.0),
-                'confidence': 'HIGH' if row['predicted_profit'] > threshold * 1.5 else 'MEDIUM'
-            }
-            results['betting_opportunities'].append(opportunity)
         
         logger.info(f"{'='*70}\n")
         
@@ -347,16 +286,8 @@ if __name__ == "__main__":
     
     print("\nPREDICTION RESULTS:")
     for pred in results['predictions']:
-        star = "⭐" if pred['recommended_bet'] else "  "
-        print(f"{star} {pred['runner_name']:20s} | Trap: {pred['trap']} | "
-              f"LTP: {pred['ltp']:6.2f} | Win%: {pred['win_probability']['calibrated']:.1%} | "
-              f"Profit: ${pred['predicted_profit']:+6.2f}")
-    
-    if results['betting_opportunities']:
-        print("\nBETTING OPPORTUNITIES:")
-        for opp in results['betting_opportunities']:
-            print(f"🎯 {opp['runner_name']:20s} | Trap: {opp['trap']} | "
-                  f"LTP: {opp['ltp']:6.2f} | Profit: ${opp['predicted_profit']:+6.2f}")
+        print(f"  {pred['runner_name']:20s} | Trap: {pred['trap']} | "
+              f"LTP: {pred['ltp']:6.2f} | Win%: {pred['win_probability']['calibrated']:.1%}")
     
     print("\n" + "="*70)
     print("✓ Test complete")
