@@ -135,17 +135,40 @@ class BetfairClient:
         elif os.getenv('BETFAIR_CERT_PATH'):
             final_cert_path = os.getenv('BETFAIR_CERT_PATH')
         else:
-            # Look for certs in parent production folder
-            parent_dir = Path(__file__).parent.parent
-            final_cert_path = str(parent_dir / '02_Upset_Prediction' / '02_Production' / 'certs' / 'client-2048.crt')
+            # Look for certs in current directory or certs subdirectory
+            current_dir = Path(__file__).parent
+            possible_paths = [
+                current_dir / 'certs' / 'client-2048.crt',
+                current_dir / 'client-2048.crt',
+                Path.cwd() / 'certs' / 'client-2048.crt'
+            ]
+            final_cert_path = None
+            for path in possible_paths:
+                if path.exists():
+                    final_cert_path = str(path)
+                    break
+            if not final_cert_path:
+                # If no file found, use env var path (will error later if not found)
+                final_cert_path = str(possible_paths[0])
         
         if key_path:
             final_key_path = key_path
         elif os.getenv('BETFAIR_KEY_PATH'):
             final_key_path = os.getenv('BETFAIR_KEY_PATH')
         else:
-            parent_dir = Path(__file__).parent.parent
-            final_key_path = str(parent_dir / '02_Upset_Prediction' / '02_Production' / 'certs' / 'client-2048.key')
+            current_dir = Path(__file__).parent
+            possible_paths = [
+                current_dir / 'certs' / 'client-2048.key',
+                current_dir / 'client-2048.key',
+                Path.cwd() / 'certs' / 'client-2048.key'
+            ]
+            final_key_path = None
+            for path in possible_paths:
+                if path.exists():
+                    final_key_path = str(path)
+                    break
+            if not final_key_path:
+                final_key_path = str(possible_paths[0])
         
         logger.info(f"Using certificate files from disk")
         return final_cert_path, final_key_path
