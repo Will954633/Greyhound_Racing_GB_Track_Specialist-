@@ -338,7 +338,7 @@ Edit `MIDRANGE_PREFERRED_CATEGORIES` list
 
 ---
 
-**Last Updated:** 18 November 2025  
-**Status:** Production Trial  
+**Last Updated:** 1 December 2025  
+**Status:** Production - Railway Deployed with GitHub Auto-Deploy  
 **Country:** GB Only  
-**Model:** Track Specialist + Betting Optimizer
+**Model:** Track Specialist + Calibrator (215MB models in artifacts/)
