@@ -35,5 +35,5 @@ RUN ls -lh artifacts/ && \
 # Expose port (Railway will set PORT env var)
 ENV PORT=8080
 
-# Run the worker process
-CMD ["python", "run_continuous_scheduled.py", "--interval", "15", "--target", "1"]
+# Run setup script then start the worker process
+CMD python download_and_setup_models.py && python run_continuous_scheduled.py --interval 15 --target 1
